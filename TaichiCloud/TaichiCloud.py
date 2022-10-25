@@ -47,6 +47,8 @@ class Cloud:
         self.rv = ti.field(dtype=ti.f32)
         self.rc = ti.field(dtype=ti.f32)
         self.rr = ti.field(dtype=ti.f32)
+        self.thp = ti.field(dtype=ti.f32)
+        self.rvp = ti.field(dtype=ti.f32)
         self.rcp = ti.field(dtype=ti.f32)
         self.rrp = ti.field(dtype=ti.f32)
         self.f_rhod = ti.field(dtype=ti.f32)
@@ -55,8 +57,8 @@ class Cloud:
         self.f_rs = ti.field(dtype=ti.f32)
         self.f_T = ti.field(dtype=ti.f32)
         ti.root.dense(ti.ij, size).place(self.rhod, self.p, self.th, self.rv,
-                                         self.rc, self.rr, self.rcp, self.rrp,
-                                         self.f_rhod, self.f_p, self.f_r, self.f_rs, self.f_T)
+                                         self.rc, self.rr, self.thp, self.rvp,
+                                         self.rcp, self.rrp, self.f_rhod, self.f_p, self.f_r, self.f_rs, self.f_T)
 
         self.init()
 
@@ -135,7 +137,7 @@ class Cloud:
         return th + (drv / 6) * (k_1 + 2 * k_2 + 2 * k_3 + k_4)
 
     @ti.kernel
-    def adj_cellwise_hlpr(self, dt: float, const_p: int):
+    def adj_cellwise_hlpr(self, dt: ti.template(), const_p: ti.template()):
         if enable_condensation:
             for i in ti.grouped(self.p):
                 rhod = self.rhod[i]
@@ -209,7 +211,42 @@ class Cloud:
     @ti.kernel
     def rhs_cellwise(self):
         """Handle coalescence"""
-        pass
+        for i in ti.grouped(self.p):
+            tmp = 0.0
+
+            if enable_auto_conversion:
+                tmp += auto_conversion_rate(self.rc[i], r_c0, k_acnv)
+
+            if enable_accretion:
+                tmp += collection_rate(self.rc[i], self.rr[i])
+
+            self.rrp[i] += tmp
+            self.rcp[i] -= tmp
+
+    @ti.kernel
+    def rhs_cellwise_nwtrph(self, dt: ti.template()):
+        for i in ti.grouped(self.p):
+            tmp = 0.0
+
+            if enable_auto_conversion:
+                tmp += auto_conversion_rate(self.rc[i], r_c0, k_acnv)
+
+            if enable_accretion:
+                tmp += collection_rate(self.rc[i], self.rr[i])
+
+            self.rrp[i] += tmp
+            self.rcp[i] -= tmp
+
+            T = self.th[i] * theta.exner(self.p[i])
+            r_vs = mixing.r_vs(T, self.p[i])
+            tmp2 = evaporation_rate(
+                self.rv[i], r_vs, self.rr[i], self.rhod[i], self.p[i]) * dt
+
+            tmp2 = min(self.rr[i], tmp2) / dt
+            self.rvp[i] += tmp2
+            self.rrp[i] -= tmp2
+            self.thp[i] -= mixing.l_v(T) / \
+                (c_pd * theta.exner(self.p[i])) * tmp2
 
     @ti.kernel
     def rhs_columnwise(self):
@@ -223,7 +260,8 @@ class Cloud:
 
 def main():
     cld = Cloud((5, 5))
-    cld.adj_cellwise(1.0)
+    cld.adj_cellwise(0.05)
+    cld.rhs_cellwise()
 
 
 if __name__ == '__main__':
