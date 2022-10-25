@@ -1,0 +1,18 @@
+[tool.poetry]
+authors = ["Gabriel Wu <wuzihua@pku.edu.cn>"]
+description = "A cloud microphysics library implemented in Taichi"
+license = "MIT"
+name = "TaichiCloud"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = "~3.10"
+taichi = "^1.2.0"
+
+[tool.poetry.dev-dependencies]
+autopep8 = "^1.7.0"
+matplotlib = "^3.6.1"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0"]
