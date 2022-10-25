@@ -106,8 +106,6 @@ class Cloud:
         self.f_rhod[i] = self.rhod[i]
         self.f_p[i] = self.p[i]
         self.update_F(i, self.th[i], self.rv[i], const_p)
-        # print(i, self.f_rhod[i], self.f_p[i],
-        #       self.f_r[i], self.f_rs[i], self.f_T[i])
 
     @ti.func
     def update_F(self, i, th, rv, const_p):
@@ -134,7 +132,7 @@ class Cloud:
         k_3 = self.eval_F(i, y_2, rv + 0.5 * drv, const_p)
         y_3 = th + k_3 * drv
         k_4 = self.eval_F(i, y_3, rv + drv, const_p)
-        return rv + (drv / 6) * (k_1 + 2 * k_2 + 2 * k_3 + k_4)
+        return th + (drv / 6) * (k_1 + 2 * k_2 + 2 * k_3 + k_4)
 
     @ti.kernel
     def adj_cellwise_hlpr(self, dt: float, const_p: int):
@@ -200,6 +198,7 @@ class Cloud:
                 assert(self.rc[i] >= 0)
                 assert(self.rv[i] >= 0)
                 assert(self.rr[i] >= 0)
+                assert(self.th[i] >= 273.15)
 
     def adj_cellwise(self, dt):
         self.adj_cellwise_hlpr(dt, 0)
