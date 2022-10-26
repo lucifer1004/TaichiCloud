@@ -1,4 +1,4 @@
-# Specific heat capacities
+# Specific heat capacities (J/kg/K)
 c_pd = 1005.0  # Dry air
 c_pv = 1850.0  # Water vapor
 c_pw = 4218.0  # Liquid water
@@ -49,9 +49,9 @@ M_d = 0.02897  # Dry air (Curry &Webster / Seinfeld & Pandis)
 M_v = M_H2O
 eps = M_v / M_d
 
-# Universal gas constant (J / K / mol)
+# Universal gas constant
 # i.e. k_B * N_A (the Boltzmann times the Avogadro constants)
-kaBoNA = 8.3144621
+kaBoNA = 8.3144621  # (J / K / mol)
 
 # Gas constants
 R_d = kaBoNA / M_d
@@ -61,19 +61,24 @@ R_v = kaBoNA / M_v
 R_d_over_c_pd = R_d / c_pd
 
 # Water density
-rho_w = 1e3
+rho_w = 1e3  # (kg / m^3)
 
 # Vapor diffusivity in air (see Properties of air, Tracy, Welch & Porter 1980)
-D_0 = 2.26e-5  # m^2 / s
+D_0 = 2.26e-5  # (m^2 / s)
 
 # Standard pressure and temperature
-p_0 = 1e5  # Pa
-T_0 = 273.15  # K
+p_0 = 1e5  # (Pa)
+T_0 = 273.15  # (K)
 
 # Thermal conductivity of air
-K_0 = 2.4e-2  # J / m / s / K
+K_0 = 2.4e-2  # (J / m / s / K)
 
 # Water triple point parameters
-p_tri = 611.73  # Pa
-T_tri = 273.16  # K
-l_tri = 2.5e6  # J / kg
+p_tri = 611.73  # (Pa)
+T_tri = 273.16  # (K)
+l_tri = 2.5e6  # (J / kg)
+
+# Earth
+g = 9.81  # Gravity acceleration (m / s^2)
+p_stp = 101325  # Standard pressure (Pa)
+T_stp = 273.15 + 15  # Standard temperature (K)

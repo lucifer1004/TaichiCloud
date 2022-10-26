@@ -29,7 +29,9 @@ enable_sedimentation = True
 # ========================
 nx = 1  # Number of grid points in x direction
 nz = 1  # Number of grid points in z direction
-spinup = 2000  # Number of time steps to spin up
+nt = 5  # Number of total time steps
+spinup = 0  # Number of time steps to spin up
+relax_th_rv = False
 
 
 @ti.func
@@ -291,14 +293,20 @@ class SingleMoment:
                 sedimentation += flux_out
         return sedimentation
 
+    @ti.kernel
+    def debug(self):
+        for i in ti.grouped(self.p):
+            print(i, self.th[i], self.rv[i], self.rc[i], self.rr[i])
+
 
 def main():
     cld = SingleMoment((nz, nx))
-    for t in range(5):
+    for t in range(nt):
         print('t = ', t)
         cld.adj_cellwise(1)
         cld.rhs_cellwise()
         print('flux = ', cld.rhs_columnwise(1))
+        cld.debug()
 
 
 if __name__ == '__main__':
