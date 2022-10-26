@@ -27,11 +27,13 @@ enable_sedimentation = True
 
 # Resolution
 # ========================
-res = 5
+nx = 1  # Number of grid points in x direction
+nz = 1  # Number of grid points in z direction
+spinup = 2000  # Number of time steps to spin up
 
 
 @ti.func
-def copysign(x: float, y: float) -> float:
+def copysign(x: ti.template(), y: ti.template()):
     sign = 1
     if y < 0:
         sign = -1
@@ -39,7 +41,14 @@ def copysign(x: float, y: float) -> float:
 
 
 @ti.data_oriented
-class Cloud:
+class SingleMoment:
+    """
+    th, thp: potential temperature and its derivative
+    rv, rvp: water vapor mixing ratio and its derivative
+    rc, rcp: cloud water mixing ratio and its derivative
+    rr, rrp: rain water mixing ratio and its derivative
+    """
+
     def __init__(self, size):
         self.rhod = ti.field(dtype=ti.f32)
         self.p = ti.field(dtype=ti.f32)
@@ -56,9 +65,10 @@ class Cloud:
         self.f_r = ti.field(dtype=ti.f32)
         self.f_rs = ti.field(dtype=ti.f32)
         self.f_T = ti.field(dtype=ti.f32)
-        ti.root.dense(ti.ij, size).place(self.rhod, self.p, self.th, self.rv,
-                                         self.rc, self.rr, self.thp, self.rvp,
-                                         self.rcp, self.rrp, self.f_rhod, self.f_p, self.f_r, self.f_rs, self.f_T)
+        ti.root.dense(ti.j, size[1]).dense(ti.i, size[0]).place(
+            self.rhod, self.p, self.th, self.rv, self.rc, self.rr, self.thp, self.rvp,
+            self.rcp, self.rrp, self.f_rhod, self.f_p, self.f_r, self.f_rs, self.f_T,
+        )
 
         self.init()
 
@@ -71,7 +81,7 @@ class Cloud:
             self.rc[i] = 0.01
 
     @ti.kernel
-    def adj_cellwise_nwtrph(self, dt: float):
+    def adj_cellwise_nwtrph(self, dt: ti.template()):
         for i in ti.grouped(self.p):
             assert(self.rv[i] >= 0.0)
             assert(self.rc[i] >= 0.0)
@@ -125,7 +135,7 @@ class Cloud:
         return theta.d_th_d_rv(self.f_T[i], th)
 
     @ti.func
-    def runge_kutta_4(self, i, th, rv, drv, const_p) -> float:
+    def runge_kutta_4(self, i, th, rv, drv, const_p):
         """Runge-Kutta 4th order integration for a single cell"""
         k_1 = self.eval_F(i, th, rv, const_p)
         y_1 = th + k_1 * 0.5 * drv
@@ -160,6 +170,13 @@ class Cloud:
 
                 while True:
                     vapor_excess = self.rv[i] - self.f_rs[i]
+
+                    # FIXME: need to call the following statement
+                    # otherwise f_r will be reset to 0.0
+                    # I do not know why!
+                    # Only Taichi v1.2.0 has this issue. v1.1.3 is OK.
+                    assert(self.f_r[i] == self.rv[i])
+
                     if vapor_excess <= r_eps:
                         if not enable_cloud_evaporation or vapor_excess >= -r_eps:
                             break
@@ -249,19 +266,39 @@ class Cloud:
                 (c_pd * theta.exner(self.p[i])) * tmp2
 
     @ti.kernel
-    def rhs_columnwise(self):
+    def rhs_columnwise(self, dz: ti.template()) -> float:
         """Handle sedimentation"""
-        pass
-
-    @ti.kernel
-    def advection(self):
-        pass
+        sedimentation = 0.0
+        if enable_sedimentation:
+            for col in range(nx):
+                flux_in = 0.0  # kg / m^3 / s
+                rhod_0 = self.rhod[0, col]
+                rhod = 0.0
+                rr = 0.0
+                for irow in range(nz):
+                    row = nz - 1 - irow
+                    rhod_below = self.rhod[row, col]
+                    rr_below = self.rr[row, col]
+                    if row != nz - 1:  # all but top grid cell
+                        flux_out = 0.5 * (rhod_below * v_term(rr_below, rhod_below,
+                                          rhod_0) + rhod * v_term(rr, rhod, rhod_0)) * rr / dz
+                        self.rrp[row + 1, col] -= (flux_in - flux_out) / rhod
+                        flux_in = flux_out
+                    rhod = rhod_below
+                    rr = rr_below
+                flux_out = -rhod * v_term(rr, rhod, rhod_0) * rr / dz
+                self.rrp[0, col] -= (flux_in - flux_out) / rhod
+                sedimentation += flux_out
+        return sedimentation
 
 
 def main():
-    cld = Cloud((5, 5))
-    cld.adj_cellwise(0.05)
-    cld.rhs_cellwise()
+    cld = SingleMoment((nz, nx))
+    for t in range(5):
+        print('t = ', t)
+        cld.adj_cellwise(1)
+        cld.rhs_cellwise()
+        print('flux = ', cld.rhs_columnwise(1))
 
 
 if __name__ == '__main__':
